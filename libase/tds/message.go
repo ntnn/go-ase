@@ -22,7 +22,7 @@ func (msg *Message) AddPackage(pack Package) {
 	msg.packages = append(msg.packages, pack)
 }
 
-func (msg *Message) readFrom(reader io.Reader) error {
+func (msg *Message) ReadFrom(reader io.Reader) error {
 	// TODO canceling during processing w/ TDS_BUFSTAT_ATTN
 	// goroutines with sync?
 	ctx, cancel := context.WithCancel(context.Background())
