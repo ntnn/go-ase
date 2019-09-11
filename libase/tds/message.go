@@ -104,7 +104,7 @@ func (msg *Message) readFromPackages(ctx context.Context, errCh chan error, byte
 			if err == ErrChannelExhausted {
 				continue
 			}
-			if err == ErrChannelClosed {
+			if err == io.EOF {
 				return
 			}
 			errCh <- fmt.Errorf("error reading token byte from channel: %w", err)
