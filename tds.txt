@@ -1,0 +1,13 @@
+# establishment
+
+010 dial
+011 ack token stream (server info)
+020 login
+030 capabilities
+040 auth handshake
+050 login ack
+
+loop
+
+010 send token
+

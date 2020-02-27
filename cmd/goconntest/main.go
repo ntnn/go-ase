@@ -34,11 +34,12 @@ func main() {
 		return
 	}
 	conf.AppName = "goconntest"
+	conf.Encrypt = tds.TDS_SEC_LOG_ENCRYPT3
 
 	log.Printf("Logging in")
 	err = c.Login(conf)
 	if err != nil {
-		log.Printf("Initializing login packet failed: %v", err)
+		log.Printf("Login failed: %v", err)
 		return
 	}
 
@@ -51,5 +52,6 @@ func main() {
 
 	for i, pkg := range msg.Packages() {
 		fmt.Printf("%d: %s\n", i, pkg)
+		fmt.Printf("%#v\n", pkg)
 	}
 }

@@ -1,0 +1,1 @@
+cnfBaseRemoveMyLog='yes'

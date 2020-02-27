@@ -1,5 +1,9 @@
 BINS ?= $(patsubst cmd/%,%,$(wildcard cmd/*))
 
+default: testrun
+testrun:
+	docker exec -ti -u sybtst $(shell id -u -n) sh +x /sybase/dlv run go run ./cmd/goconntest
+
 build: $(BINS)
 $(BINS):
 	go build -o $@ ./cmd/$@/

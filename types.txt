@@ -1,0 +1,115 @@
+numeric:
+        // annoying
+	DECIMAL        ASEType = 17
+	NUMERIC        ASEType = 16
+
+        // undocumented, not accepted by ASE but defined
+	LONG           ASEType = 20
+	USHORT         ASEType = 24
+
+datetime:
+	BIGTIME        ASEType = 36
+	DATE           ASEType = 27
+	DATETIME       ASEType = 12
+	DATETIME4      ASEType = 13
+	TIME           ASEType = 28
+
+binary:
+        // BLOB is defined but doesn't get accepted by ASE, probably only IQ
+	BLOB           ASEType = 26
+        // LONGBINARY is defined but doesn't get accepted by ASE, probably only IQ
+	LONGBINARY     ASEType = 3
+
+	IMAGE          ASEType = 5
+
+money:
+	MONEY          ASEType = 14
+	MONEY4         ASEType = 15
+
+locators:
+	IMAGELOCATOR   ASEType = 38
+	TEXTLOCATOR    ASEType = 37
+	UNITEXTLOCATOR ASEType = 39
+
+text:
+        // Not documented, maybe IQ
+	LONGCHAR       ASEType = 2
+
+        // nullable LONG VARCHAR
+	TEXT           ASEType = 4
+
+	UNICHAR        ASEType = 25
+	UNITEXT        ASEType = 29
+	XML            ASEType = 34
+
+other:
+	BOUNDARY       ASEType = 22
+	ILLEGAL        ASEType = -1
+	SENSITIVITY    ASEType = 21
+	USER           ASEType = 100
+	VOID           ASEType = 23
+
+// undefined but documented:
+// UNIQUEIDENTIFIER / UNIQUEIDENTIFIERSTR
+
+documented:                         cgo     go
+    exact numeric
+        integer
+            bigint                  /
+            int                     /
+            smallint                /
+            tinyint                 /
+            unsigned bigint         /
+            unsigned int            /
+            unsigned smallint       /
+        decimal
+            numeric / decimal       /
+    approximate numeric
+        float                       /
+        double  (stored, signaled and handled as float)
+        real                        /
+    money
+        money                       /
+        smallmoney                  /
+    timestamp
+        timestamp
+    date and time
+        date                        /
+        time                        /
+        smalldatetime               /
+        datetime                    /
+        bigdatetime                 /
+        bigtime                     /
+    character
+        varchar                     /
+        char                        /
+        unichar                     x
+        univarchar                  x
+        nchar                       /
+        nvarchar                    /
+        text                        x
+    binary
+        binary                      /
+        varbinary                   /
+    bit
+        bit                         /
+    text etc.pp.
+        text                        x
+        unitext                     x
+        image                       /               Maybe decode to image.Image?
+
+date -> 1.1.1 to 31.12.9999
+    4 bytes, maybe number of days since 1.1.1
+time -> 00:00 to 23:59:59.990
+    4 bytes
+smalldatetime -> 1.1.1900 to 6.6.2079
+    2 bytes for number of days since 1.1.1900 and 2 bytes for number of minutes after midnight
+datetime -> 1.1.1753 to 31.12.9999
+    8 bytes, 4 bytes number of days since 1.1.1900, 4 bytes time of day
+/bigdatetime -> 1.1.1 00:00 to 31.12.9999 23:59:59.999999
+    64bit integer number of microseconds since midnight
+/bigtime -> 00:00 to 23:59:59.999999
+    64bit integer number of microseconds since midnight
+
+CS_DATETIME and CS_DATETIME4
+
