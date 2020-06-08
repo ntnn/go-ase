@@ -349,6 +349,13 @@ func (stmt *statement) exec(args []driver.NamedValue) error {
 			}
 			ptr = unsafe.Pointer(&b)
 			datalen = 1
+		case types.UNICHAR, types.TEXT, types.UNITEXT:
+			ptr = unsafe.Pointer(C.CString(arg.Value.(string)))
+			defer C.free(ptr)
+
+			datalen = len(arg.Value.(string)) * 2
+			datafmt.format = C.CS_FMT_NULLTERM
+			datafmt.maxlength = C.CS_MAX_CHAR
 		default:
 			return fmt.Errorf("Unhandled column type: %s", stmt.columnTypes[i])
 		}
