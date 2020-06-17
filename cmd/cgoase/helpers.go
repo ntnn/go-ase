@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -13,8 +14,8 @@ import (
 	"github.com/SAP/go-ase/libase/types"
 )
 
-const (
-	MaxColPrintLength = 50
+var (
+	fMaxColPrintLength = flag.Int("maxColLength", 50, "Maximum number of characters to print for column")
 )
 
 func process(conn *cgo.Connection, query string) error {
@@ -58,8 +59,8 @@ func processRows(rows *cgo.Rows) error {
 	fmt.Printf("|")
 	for i, colName := range colNames {
 		cellLen := int(rows.ColumnTypeMaxLength(i))
-		if cellLen > MaxColPrintLength {
-			cellLen = MaxColPrintLength
+		if cellLen > *fMaxColPrintLength {
+			cellLen = *fMaxColPrintLength
 		}
 		s := " %-" + strconv.Itoa(cellLen) + "s |"
 		fmt.Printf(s, colName)
