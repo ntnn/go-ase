@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +11,10 @@ import (
 
 	"github.com/SAP/go-ase/cgo"
 	"github.com/SAP/go-ase/libase/types"
+)
+
+const (
+	MaxColPrintLength = 50
 )
 
 func process(conn *cgo.Connection, query string) error {
@@ -48,10 +53,17 @@ func process(conn *cgo.Connection, query string) error {
 func processRows(rows *cgo.Rows) error {
 	colNames := rows.Columns()
 
+	colLengths := map[int]int{}
+
 	fmt.Printf("|")
 	for i, colName := range colNames {
-		s := " %-" + strconv.Itoa(int(rows.ColumnTypeMaxLength(i))) + "s |"
+		cellLen := int(rows.ColumnTypeMaxLength(i))
+		if cellLen > MaxColPrintLength {
+			cellLen = MaxColPrintLength
+		}
+		s := " %-" + strconv.Itoa(cellLen) + "s |"
 		fmt.Printf(s, colName)
+		colLengths[i] = cellLen
 	}
 	fmt.Printf("\n")
 
@@ -72,16 +84,24 @@ func processRows(rows *cgo.Rows) error {
 			return fmt.Errorf("Scanning cells failed: %v", err)
 		}
 
+		fmt.Printf("|")
 		for i, cell := range cells {
-			s := "| %-" + strconv.Itoa(int(rows.ColumnTypeMaxLength(i))) + "v "
-			switch cell.(type) {
-			case *types.Decimal:
+			s := " %-" + strconv.Itoa(colLengths[i]) + "v |"
+			switch rows.ColumnTypeDatabaseTypeName(i) {
+			case "DECIMAL":
 				fmt.Printf(s, cell.(*types.Decimal).String())
+			case "IMAGE":
+				b := hex.EncodeToString(cell.([]byte))
+				if len(b) > colLengths[i] {
+					fmt.Printf(s, b[:colLengths[i]])
+				} else {
+					fmt.Printf(s, b)
+				}
 			default:
 				fmt.Printf(s, (interface{})(cell))
 			}
 		}
-		fmt.Printf("|\n")
+		fmt.Printf("\n")
 	}
 
 	return nil
