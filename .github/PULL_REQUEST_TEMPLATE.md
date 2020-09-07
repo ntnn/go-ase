@@ -1,14 +1,25 @@
-<!--
-SPDX-FileCopyrightText: 2020 SAP SE
+---
+# SPDX-FileCopyrightText: 2020 SAP SE
+#
+# SPDX-License-Identifier: Apache-2.0
+name: Pull Request
+about: Create a pull request
+title: ''
+labels: ''
+assignees: ''
 
-SPDX-License-Identifier: Apache-2.0
--->
+---
 
-# Description
+**Description**
 
-Describe what your patch accomplishes.
-Please also link to related issues here.
+Describe what the PR accomplishes
 
-# How was the patch tested?
+**Related issues**
 
-Describe how you tested your patch.
+Link any related issues here.
+
+**Tests**
+
+- [ ] make lint
+- [ ] make test-go / make test-cgo
+- [ ] make integration-go / make integration-cgo
