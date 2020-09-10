@@ -72,15 +72,15 @@ func (c *Conn) genericResults(ctx context.Context) (driver.Rows, driver.Result, 
 				rows.RowFmt = typed
 				return true, nil
 			case *tds.DonePackage:
-				if typed.Status&tds.TDS_DONE_COUNT == tds.TDS_DONE_COUNT {
+				if typed.Status == tds.TDS_DONE_COUNT {
 					result.rowsAffected = int64(typed.Count)
 				}
 
-				if typed.Status&tds.TDS_DONE_MORE == tds.TDS_DONE_MORE {
+				if typed.Status == tds.TDS_DONE_MORE {
 					return false, nil
 				}
 
-				if typed.Status&tds.TDS_DONE_PROC == tds.TDS_DONE_PROC || typed.Status&tds.TDS_DONE_FINAL == tds.TDS_DONE_FINAL {
+				if typed.Status == tds.TDS_DONE_PROC || typed.Status == tds.TDS_DONE_FINAL {
 					return true, nil
 				}
 
