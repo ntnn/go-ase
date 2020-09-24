@@ -19,6 +19,7 @@ type PacketQueue struct {
 	sync.Mutex
 	queue                  []*Packet
 	indexPacket, indexData int
+	recvEOM                bool
 
 	// packetSize should be a function returning the currently used
 	// packetSize.
@@ -43,6 +44,7 @@ func (queue *PacketQueue) Reset() {
 	queue.queue = []*Packet{}
 	queue.indexPacket = 0
 	queue.indexData = 0
+	queue.recvEOM = false
 }
 
 // AddPacket adds a packet to the queue.
@@ -51,6 +53,9 @@ func (queue *PacketQueue) AddPacket(packet *Packet) {
 	defer queue.Unlock()
 
 	queue.queue = append(queue.queue, packet)
+	if packet.Header.Status&TDS_BUFSTAT_EOM == TDS_BUFSTAT_EOM {
+		queue.recvEOM = true
+	}
 }
 
 // Position returns the two indizes used by PacketQueue to store its
@@ -83,18 +88,19 @@ func (queue *PacketQueue) SetPosition(indexPacket, indexData int) {
 // by the position indizes.
 // See Position for more details regarding positions.
 func (queue *PacketQueue) DiscardUntilCurrentPosition() {
-	// .indexPacket points to no particular packet, reset queue
-	if len(queue.queue) == 0 || queue.indexPacket >= len(queue.queue) {
-		queue.Reset()
-		return
-	}
-
 	queue.Lock()
 	defer queue.Unlock()
 
 	// shift queue
 	queue.queue = queue.queue[queue.indexPacket:]
 	queue.indexPacket = 0
+
+	// indexPacket points to no packet in the queue, reset indexData and
+	// return.
+	if queue.indexPacket >= len(queue.queue) {
+		queue.indexData = 0
+		return
+	}
 
 	// If indexData is the end of the indexPacket the packet itself can
 	// be discarded as well.
@@ -139,17 +145,13 @@ func (queue *PacketQueue) Bytes(n int) ([]byte, error) {
 
 	for {
 		if queue.indexPacket >= len(queue.queue) {
-			// No more packets available - check if more packets are
-			// expected
-			if len(queue.queue) > 0 && queue.queue[len(queue.queue)-1].Header.Status != TDS_BUFSTAT_EOM {
-				// More packets are expected and more bytes need to be
-				// read - return ErrNotEnoughBytes
-				return bs, ErrNotEnoughBytes
+			if queue.recvEOM {
+				// Received EOM and no more packets in queue - return EOF
+				return bs, fmt.Errorf("not enough packets in payload: %w", io.EOF)
 			}
-
-			// No more packets are expected but more bytes need to be
-			// read - return io.EOF
-			return bs, fmt.Errorf("not enough packets in queue: %w", io.EOF)
+			// More packets are expected and more bytes need to be
+			// read - return ErrNotEnoughBytes
+			return bs, ErrNotEnoughBytes
 		}
 		data := queue.queue[queue.indexPacket].Data
 
