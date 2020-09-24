@@ -18,8 +18,7 @@ func (c Conn) language(ctx context.Context, query string) (driver.Rows, driver.R
 		Cmd:    query,
 	}
 
-	err := c.Channel.SendPackage(ctx, langPkg)
-	if err != nil {
+	if err := c.Channel.SendPackage(ctx, langPkg); err != nil {
 		return nil, nil, fmt.Errorf("error sending language command: %w", err)
 	}
 

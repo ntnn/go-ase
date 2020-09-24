@@ -72,7 +72,7 @@ func DoMain() error {
 	var b string
 
 	for rows.Next() {
-		if err = rows.Scan(&a, &b); err != nil {
+		if err := rows.Scan(&a, &b); err != nil {
 			return fmt.Errorf("failed to scan row: %w", err)
 		}
 

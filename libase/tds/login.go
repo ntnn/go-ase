@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/SAP/go-ase/libase/types"
 )
@@ -44,18 +45,15 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 		return fmt.Errorf("error building login payload: %w", err)
 	}
 
-	err = tdsChan.QueuePackage(ctx, pack)
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, pack); err != nil {
 		return fmt.Errorf("error adding login payload package: %w", err)
 	}
 
-	err = tdsChan.QueuePackage(ctx, tdsChan.tdsConn.Caps)
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, tdsChan.tdsConn.Caps); err != nil {
 		return fmt.Errorf("error adding login capabilities package: %w", err)
 	}
 
-	err = tdsChan.SendRemainingPackets(ctx)
-	if err != nil {
+	if err := tdsChan.SendRemainingPackets(ctx); err != nil {
 		return fmt.Errorf("error sending packets: %w", err)
 	}
 
@@ -202,8 +200,7 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 	}
 
 	// Prepare response
-	err = tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_LOGPWD3))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_LOGPWD3)); err != nil {
 		return fmt.Errorf("error queueing message package for password transmission: %w", err)
 	}
 
@@ -213,21 +210,18 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 	}
 
 	// TDS does not support TDS_WIDETABLES in login negotiation
-	err = tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, passFmt))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, passFmt)); err != nil {
 		return fmt.Errorf("error queueing ParamFmt password package: %w", err)
 	}
 
 	passData.SetValue(encryptedPass)
-	err = tdsChan.QueuePackage(ctx, NewParamsPackage(passData))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewParamsPackage(passData)); err != nil {
 		return fmt.Errorf("error queueing Params password package: %w", err)
 	}
 
 	if len(config.RemoteServers) > 0 {
 		// encrypted remote password
-		err = tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_REMPWD3))
-		if err != nil {
+		if err := tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_REMPWD3)); err != nil {
 			return fmt.Errorf("error queueing message package for remote servers: %w", err)
 		}
 
@@ -261,13 +255,11 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 			params[i+1] = passData
 		}
 
-		err = tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, paramFmts...))
-		if err != nil {
+		if err := tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, paramFmts...)); err != nil {
 			return fmt.Errorf("error queueing package ParamFmt for remote servers: %w", err)
 		}
 
-		err = tdsChan.QueuePackage(ctx, NewParamsPackage(params...))
-		if err != nil {
+		if err := tdsChan.QueuePackage(ctx, NewParamsPackage(params...)); err != nil {
 			return fmt.Errorf("error queueing package Params for remote servers: %w", err)
 		}
 	}
@@ -282,8 +274,7 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 		return fmt.Errorf("error encrypting session key: %w", err)
 	}
 
-	err = tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_SYMKEY))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewMsgPackage(TDS_MSG_HASARGS, TDS_MSG_SEC_SYMKEY)); err != nil {
 		return fmt.Errorf("error queueing package Msg for symmetric key: %w", err)
 	}
 
@@ -293,18 +284,15 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 	}
 	symkeyData.SetValue(encryptedSymKey)
 
-	err = tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, symkeyFmt))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewParamFmtPackage(false, symkeyFmt)); err != nil {
 		return fmt.Errorf("error queueing package ParamFmt for symmetric key: %w", err)
 	}
 
-	err = tdsChan.QueuePackage(ctx, NewParamsPackage(symkeyData))
-	if err != nil {
+	if err := tdsChan.QueuePackage(ctx, NewParamsPackage(symkeyData)); err != nil {
 		return fmt.Errorf("error queueing package Params for symmetric key: %w", err)
 	}
 
-	err = tdsChan.SendRemainingPackets(ctx)
-	if err != nil {
+	if err := tdsChan.SendRemainingPackets(ctx); err != nil {
 		return fmt.Errorf("error sending login payload: %w", err)
 	}
 

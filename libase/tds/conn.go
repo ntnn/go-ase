@@ -167,16 +167,14 @@ func (tds *Conn) Close() error {
 	}
 
 	for _, channel := range tdsChannels {
-		err := channel.Close()
-		if err != nil {
+		if err := channel.Close(); err != nil {
 			me = multierror.Append(me, fmt.Errorf("error closing channel: %w", err))
 		}
 	}
 
 	tds.ctxCancel()
 
-	err := tds.conn.Close()
-	if err != nil {
+	if err := tds.conn.Close(); err != nil {
 		me = multierror.Append(me, fmt.Errorf("error closing connection: %w", err))
 	}
 

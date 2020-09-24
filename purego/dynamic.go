@@ -7,7 +7,9 @@ package purego
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -80,8 +82,7 @@ func (c *Conn) NewStmt(ctx context.Context, name, query string, create_proc bool
 	// Reset statement to default before proceeding
 	stmt.Reset()
 
-	err := stmt.allocateOnServer(ctx)
-	if err != nil {
+	if err := stmt.allocateOnServer(ctx); err != nil {
 		return nil, fmt.Errorf("go-ase: error allocating dynamic statement '%s': %w", query, err)
 	}
 
@@ -97,12 +98,11 @@ func (stmt *Stmt) allocateOnServer(ctx context.Context) error {
 	}
 	stmt.Reset()
 
-	err := stmt.recvDynAck(ctx)
-	if err != nil {
+	if err := stmt.recvDynAck(ctx); err != nil {
 		return err
 	}
 
-	_, err = stmt.conn.Channel.NextPackageUntil(ctx, true,
+	_, err := stmt.conn.Channel.NextPackageUntil(ctx, true,
 		func(pkg tds.Package) (bool, error) {
 			switch typed := pkg.(type) {
 			case *tds.ParamFmtPackage:
@@ -116,13 +116,13 @@ func (stmt *Stmt) allocateOnServer(ctx context.Context) error {
 				if err != nil {
 					return true, err
 				}
-				return true, nil
+				return ok, nil
 			default:
 				return false, fmt.Errorf("unexpected package received: %#v", typed)
 			}
 		},
 	)
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		stmt.close(ctx)
 		return err
 	}
@@ -162,13 +162,11 @@ func (stmt *Stmt) close(ctx context.Context) error {
 	}
 	stmt.Reset()
 
-	err = stmt.recvDynAck(ctx)
-	if err != nil {
+	if err := stmt.recvDynAck(ctx); err != nil {
 		return err
 	}
 
-	err = stmt.recvDoneFinal(ctx)
-	if err != nil {
+	if err := stmt.recvDoneFinal(ctx); err != nil {
 		return err
 	}
 
@@ -235,8 +233,7 @@ func (stmt Stmt) GenericExec(ctx context.Context, args []driver.NamedValue) (dri
 	stmt.Reset()
 
 	if stmt.paramFmt != nil {
-		err := stmt.conn.Channel.QueuePackage(ctx, stmt.paramFmt)
-		if err != nil {
+		if err := stmt.conn.Channel.QueuePackage(ctx, stmt.paramFmt); err != nil {
 			return nil, nil, fmt.Errorf("error queueing dynamic statement parameter format: %w", err)
 		}
 
