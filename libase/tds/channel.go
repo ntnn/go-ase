@@ -240,6 +240,10 @@ func (tdsChan *Channel) Logout() error {
 			done.TranState)
 	}
 
+	if _, err := tdsChan.NextPackageUntil(ctx, true, nil); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("error consuming remaining packages: %w", err)
+	}
+
 	return nil
 }
 
