@@ -151,6 +151,10 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 		return fmt.Errorf("expected done package as fifth response, received: %v", pkg)
 	}
 
+	if _, err := tdsChan.NextPackageUntil(ctx, true, nil); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("error consuming remaining packages: %w", err)
+	}
+
 	// get asymmetric encryption type
 	paramAsymmetricType, ok := params.DataFields[0].(*Int4FieldData)
 	if !ok {
@@ -374,6 +378,10 @@ func (tdsChan *Channel) Login(ctx context.Context, config *LoginConfig) error {
 	if done.TranState&TDS_TRAN_COMPLETED != TDS_TRAN_COMPLETED {
 		return fmt.Errorf("expected done package with transtate TDS_TRAN_COMPLETED, received %s",
 			done.TranState)
+	}
+
+	if _, err := tdsChan.NextPackageUntil(ctx, true, nil); err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("error consuming remaining packages: %w", err)
 	}
 
 	tdsChan.Reset()
