@@ -61,6 +61,11 @@ func (rows *Rows) Next(dst []driver.Value) error {
 					dst[i] = typed.DataFields[i].Value()
 				}
 				return true, nil
+			case *tds.ParamsPackage:
+				for i := range dst {
+					dst[i] = typed.DataFields[i].Value()
+				}
+				return true, nil
 			case *tds.RowFmtPackage:
 				// TODO: should next return io.EOF if the result set is
 				// finished?
