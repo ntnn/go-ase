@@ -16,7 +16,10 @@ import (
 	"github.com/hashicorp/go-multierror"
 )
 
-var ErrNoPackageReady = errors.New("no package ready")
+var (
+	ErrNoPackageReady = errors.New("no package ready")
+	ErrChannelClosed  = errors.New("channel is closed")
+)
 
 // Channel is a channel in a multiplexed connection with a TDS
 // server.
@@ -176,6 +179,7 @@ func (tdsChan *Channel) Close() error {
 	// Lock the channel and store the closed indicator.
 	tdsChan.Lock()
 	defer tdsChan.Unlock()
+
 	tdsChan.closed = true
 
 	// Channel closing has been communicated, remove channel from conn
@@ -288,9 +292,8 @@ func (tdsChan *Channel) NextPackage(ctx context.Context, wait bool) (Package, er
 	tdsChan.RLock()
 	defer tdsChan.RUnlock()
 
-	// TODO return a proper error
 	if tdsChan.closed {
-		return nil, nil
+		return nil, ErrChannelClosed
 	}
 
 	ch := make(chan error, 1)
@@ -326,11 +329,33 @@ func (tdsChan *Channel) NextPackage(ctx context.Context, wait bool) (Package, er
 // NextPackageUntil calls NextPackage until the passed function
 // processPkg returns true.
 //
-// This can be used to consume all packages of a response until the Done
-// token if an error occurred.
+// If processPkg returns true no further packages will be consumed, so
+// the communication handling can be passed to another function.
 //
-// If the passed function returns an error the error will be used to
-// wrap all EED messages until the error occurred.
+// If processPkg returns an error all packages in the payload will be
+// consumed and an error containing all EEDPackages in the payload will
+// be returned.
+//
+// If processPkg is nil all packages in the current payload are consumed
+// and no package and an io.EOF error is returned.
+// The io.EOF is wrapped with an EEDError with all EEDPackages in the
+// payload if the payload contained any EEDPackages.
+//
+// To just consume all packages a consumer can return an io.EOF in
+// processPkg and check if the error is not of io.EOF:
+//
+// _, err := ...NextPackageUntil(ctx, wait, func(pkg tds.Package) (bool, error) {
+//     switch pkg.(type) {
+//     case ...
+//         // handle communication
+//     case ...
+//         // handle final communication
+//         return true, io.EOF
+//     }
+// }
+// if err != nil && !errors.Is(err, io.EOF) {
+//     // error handling
+// }
 func (tdsChan *Channel) NextPackageUntil(ctx context.Context, wait bool, processPkg func(Package) (bool, error)) (Package, error) {
 	eedError := &EEDError{}
 
@@ -340,36 +365,40 @@ func (tdsChan *Channel) NextPackageUntil(ctx context.Context, wait bool, process
 			return nil, err
 		}
 
-		if eed, ok := pkg.(*EEDPackage); ok {
-			eedError.Add(eed)
+		switch typed := pkg.(type) {
+		case *EEDPackage:
+			eedError.Add(typed)
+			continue
+		case *TokenlessPackage:
+			if typed.Type != EOMPackage {
+				break
+			}
+
+			if len(eedError.EEDPackages) == 0 {
+				return nil, io.EOF
+			}
+			eedError.WrappedError = io.EOF
+			return nil, eedError
+		}
+
+		if processPkg == nil {
 			continue
 		}
 
 		ok, err := processPkg(pkg)
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, err
-			}
-
-			// Consume all packages until DonePackage{TDS_DONE_FINAL} if
-			// the current package wasn't a DonePackage{TDS_DONE_FINAL}
+			// Consume all packages until TokenlessPackage{EOMPackage}
 			// to prevent any leftovers that may impact later
 			// communications.
-			if done, ok := pkg.(*DonePackage); !ok || (ok && done.Status != TDS_DONE_FINAL) {
-				_, err := tdsChan.NextPackageUntil(ctx, wait, func(pkg Package) (bool, error) {
-					done, ok := pkg.(*DonePackage)
-					if !ok {
-						return false, nil
-					}
+			_, subErr := tdsChan.NextPackageUntil(ctx, wait, func(pkg Package) (bool, error) {
+				return false, nil
+			})
 
-					return done.Status == TDS_DONE_FINAL, nil
-				})
-				// Append any additional received EEDPackages to the
-				// EEDError.
-				var finalEEDError *EEDError
-				if err != nil && errors.As(err, &finalEEDError) {
-					eedError.EEDPackages = append(eedError.EEDPackages, finalEEDError.EEDPackages...)
-				}
+			// Append any additional received EEDPackages to the
+			// EEDError.
+			var finalEEDError *EEDError
+			if subErr != nil && errors.As(subErr, &finalEEDError) {
+				eedError.EEDPackages = append(eedError.EEDPackages, finalEEDError.EEDPackages...)
 			}
 
 			err = fmt.Errorf("tds: error in user-defined processing function: %w", err)
@@ -400,7 +429,7 @@ func (tdsChan *Channel) QueuePackage(ctx context.Context, pkg Package) error {
 	defer tdsChan.RUnlock()
 	// TODO return proper error
 	if tdsChan.closed {
-		return nil
+		return ErrChannelClosed
 	}
 
 	if acceptor, ok := pkg.(LastPkgAcceptor); ok {
@@ -426,7 +455,7 @@ func (tdsChan *Channel) SendRemainingPackets(ctx context.Context) error {
 	defer tdsChan.RUnlock()
 	// TODO return proper error
 	if tdsChan.closed {
-		return nil
+		return ErrChannelClosed
 	}
 
 	// SendRemainingPackets is only called when completing sending
@@ -536,7 +565,12 @@ func (tdsChan *Channel) WritePacket(packet *Packet) {
 		curPacket, curData := tdsChan.queueRx.Position()
 
 		// Attempt to parse a Package.
-		ok := tdsChan.tryParsePackage()
+		ok, err := tdsChan.tryParsePackage()
+		// If an io.EOF is returned then all packets have been consumed.
+		if err != nil && errors.Is(err, io.EOF) {
+			tdsChan.queueRx.Reset()
+			return
+		}
 		if !ok {
 			// Attempt failed, roll back position and return.
 			tdsChan.queueRx.SetPosition(curPacket, curData)
@@ -550,7 +584,7 @@ func (tdsChan *Channel) WritePacket(packet *Packet) {
 }
 
 // tryParsePackage attempts to parse a Package from the queued Packets.
-func (tdsChan *Channel) tryParsePackage() bool {
+func (tdsChan *Channel) tryParsePackage() (bool, error) {
 	// Attempt to process data from channel into a Package.
 	tokenByte, err := tdsChan.queueRx.Byte()
 	if err != nil {
@@ -560,28 +594,20 @@ func (tdsChan *Channel) tryParsePackage() bool {
 			// TDS doesn't always send a DonePackage with TDS_DONE_FINAL
 			// - usually only when a procedure with multiple commands is
 			// being executed.
-			lastPkg, ok := tdsChan.lastPkgRx.(*DonePackage)
-			if !ok {
-				return false
-			}
-
-			if lastPkg.Status == TDS_DONE_FINAL ||
-				lastPkg.Status == TDS_DONE_COUNT {
-				// The last received package is a DonePackage with
-				// TDS_DONE_FINAL or TDS_DONE_COUNT - no need to add one.
-				return false
-			}
-
-			tdsChan.packageCh <- &DonePackage{Status: TDS_DONE_FINAL}
+			// Since it may also send multiple
+			// DonePackage{TDS_DONE_FINAL} a separate control package is
+			// send to signal EOM to the consumer.
+			tdsChan.packageCh <- &TokenlessPackage{Type: EOMPackage}
+			return false, err
 		}
-		return false
+		return false, nil
 	}
 
 	// Create Package.
 	pkg, err := LookupPackage(Token(tokenByte))
 	if err != nil {
 		tdsChan.errCh <- err
-		return false
+		return false, nil
 	}
 
 	// If the Package is tokenless write the token byte back in.
@@ -592,7 +618,7 @@ func (tdsChan *Channel) tryParsePackage() bool {
 	if acceptor, ok := pkg.(LastPkgAcceptor); ok {
 		if err := acceptor.LastPkg(tdsChan.lastPkgRx); err != nil {
 			tdsChan.errCh <- fmt.Errorf("error in LastPkg: %w", err)
-			return false
+			return false, nil
 		}
 	}
 
@@ -600,12 +626,12 @@ func (tdsChan *Channel) tryParsePackage() bool {
 	if err := pkg.ReadFrom(tdsChan.queueRx); err != nil {
 		if errors.Is(err, ErrNotEnoughBytes) {
 			// Not enough bytes available to parse package
-			return false
+			return false, nil
 		}
 
 		// Parsing went wrong, record as error
 		tdsChan.errCh <- fmt.Errorf("error parsing package: %w", err)
-		return false
+		return false, nil
 	}
 
 	pass, err := tdsChan.handleSpecialPackage(pkg)
@@ -613,15 +639,15 @@ func (tdsChan *Channel) tryParsePackage() bool {
 		tdsChan.errCh <- fmt.Errorf("error while handling special package: %w", err)
 		// Package handling errored, but the package could be parsed.
 		// Continue.
-		return true
+		return true, nil
 	}
 
 	if !pass {
 		// Package should not be handled further, continue
-		return true
+		return true, nil
 	}
 
 	tdsChan.packageCh <- pkg
 	tdsChan.lastPkgRx = pkg
-	return true
+	return true, nil
 }
