@@ -9,5 +9,5 @@ go 1.15
 
 require (
 	github.com/SAP/go-dblib v0.0.0-20210610133137-f25b0f0fced0
-	github.com/spf13/pflag v0.0.0-20170417173400-9e4c21054fa1
+	github.com/spf13/pflag v1.0.5
 )
